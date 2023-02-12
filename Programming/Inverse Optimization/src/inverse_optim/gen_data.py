@@ -134,6 +134,7 @@ def generate_data_alpha(goal_pd, amount, dim, lr, epochs, decay_speed=10, invest
         opt.step()
         scheduler.step()
         
+    
 
         if investigate:
             movement = pts.grad * scheduler.get_last_lr()[0]
@@ -251,15 +252,15 @@ def per_generate_data_alpha(goal_pd, amount, dim, lr, epochs, per1, per2, decay_
         avg_mag_list = []
     
     # Plot initial point cloud
-    # P = pts.detach().numpy()
-    # plt.scatter(P[:, 0], P[:, 1])
-    # plt.show()
+    P = pts.detach().numpy()
+    plt.scatter(P[:, 0], P[:, 1])
+    plt.show()
 
     # Perform SGD
     for epoch in tqdm(range(epochs)):
         opt.zero_grad()
         myloss_alpha(pts, goal_pd, sliced, thetas).backward()
-        per(pts, per1).backward()
+        # per(pts, per1).backward()
 
         if investigate:
             loss_list.append(myloss_alpha(pts, goal_pd, sliced, thetas).item())
@@ -269,6 +270,7 @@ def per_generate_data_alpha(goal_pd, amount, dim, lr, epochs, per1, per2, decay_
         scheduler.step()
 
         pts = pts % per1
+        print(pts)
 
         # if investigate:
         #     movement = pts.grad * scheduler.get_last_lr()[0]
