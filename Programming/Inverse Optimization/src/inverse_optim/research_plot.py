@@ -3,7 +3,7 @@ from inverse_optim import gen_data
 import torch
 import numpy as np
 
-def research_lr(lr_list, goal_pd, amount, dim, epochs, decay_speed=10, sliced=False, thetas=torch.tensor([k/4 * np.pi for k in range(5)])):
+def research_lr(lr_list, goal_pd, amount, dim, epochs, decay_speed=10, sliced=False, thetas=torch.tensor([k/4 * np.pi for k in range(5)]), filtr="alpha_rips_hybrid"):
     """
     Args:
         lr_list             : list of floats that represent learning rates that you would want to compare
@@ -23,8 +23,8 @@ def research_lr(lr_list, goal_pd, amount, dim, epochs, decay_speed=10, sliced=Fa
 
     for lr in lr_list:
         _, loss_list, _, _, _ = \
-            gen_data.generate_data_alpha(goal_pd=goal_pd, amount=amount, dim=dim,\
-                 lr=lr, epochs=epochs, decay_speed=decay_speed, investigate=True, sliced=sliced, thetas=thetas)
+            gen_data.generate_data(goal_pd=goal_pd, amount=amount, dim=dim,\
+                 lr=lr, epochs=epochs, decay_speed=decay_speed, investigate=True, sliced=sliced, thetas=thetas, filtr=filtr)
         
         # Loss research
         plt.plot(range(epochs), loss_list, label=f"lr = {lr}", alpha=0.9)
@@ -36,7 +36,7 @@ def research_lr(lr_list, goal_pd, amount, dim, epochs, decay_speed=10, sliced=Fa
     plt.legend(loc="upper right")
     plt.show()
 
-def research_move(lr, goal_pd, amount, dim, epochs, decay_speed=10):
+def research_move(lr, goal_pd, amount, dim, epochs, decay_speed=10, filtr="alpha_rips_hybrid"):
     """
     Args:
         lr                  : learning rate
@@ -53,8 +53,8 @@ def research_move(lr, goal_pd, amount, dim, epochs, decay_speed=10):
     """
 
     _, _, max_mag_list, min_mag_list, avg_mag_list = \
-            gen_data.generate_data_alpha(goal_pd=goal_pd, amount=amount, dim=dim,\
-                 lr=lr, epochs=epochs, decay_speed=decay_speed, investigate=True)
+            gen_data.generate_data(goal_pd=goal_pd, amount=amount, dim=dim,\
+                 lr=lr, epochs=epochs, decay_speed=decay_speed, investigate=True, filtr=filtr)
 
     plt.plot(range(epochs), max_mag_list, label=f"Max Mag, lr={lr}")
     plt.plot(range(epochs), min_mag_list, label=f"Min Mag, lr={lr}")

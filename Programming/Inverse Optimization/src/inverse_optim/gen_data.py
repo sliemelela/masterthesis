@@ -72,7 +72,7 @@ def create_alpha_pd(pts):
     
     return [diag0, diag1]
 
-def myloss_alpha(pts, goal_pd, sliced=False, thetas=torch.tensor([k/4 * np.pi for k in range(5)])):
+def myloss_alpha_ripser_hybrid(pts, goal_pd, sliced=False, thetas=torch.tensor([k/4 * np.pi for k in range(5)])):
     """
     Args:
         pts       : points of the dataset that we want to change into a dataset that 
@@ -107,7 +107,7 @@ def myloss_alpha(pts, goal_pd, sliced=False, thetas=torch.tensor([k/4 * np.pi fo
         dist = sum(dists)/len(dists)
         return dist
 
-def generate_data_alpha(goal_pd, amount, dim, lr, epochs, decay_speed=10, investigate=False, sliced=False, thetas=torch.tensor([k/4 * np.pi for k in range(5)])):
+def generate_data(goal_pd, amount, dim, lr, epochs, decay_speed=10, investigate=False, sliced=False, thetas=torch.tensor([k/4 * np.pi for k in range(5)]), filtr="alpha_rips_hybrid"):
     """
     Args:
         goal_pd             : persistence diagram that we want to 'approximate' in the sense that we want to 
@@ -122,6 +122,7 @@ def generate_data_alpha(goal_pd, amount, dim, lr, epochs, decay_speed=10, invest
                             : if set to true, it will produce a list of the losses and avg/max/min magnitude of movements per points.
         sliced              : if set to true, it will use the sliced wasserstein distance
         thetas              : the angles used for the sliced wasserstein distance
+        type                : what kind of filtration to use
     
     Returns:
         - The generated dataset
@@ -152,10 +153,11 @@ def generate_data_alpha(goal_pd, amount, dim, lr, epochs, decay_speed=10, invest
     # Perform SGD
     for epoch in tqdm(range(epochs)):
         opt.zero_grad()
-        myloss_alpha(pts, goal_pd, sliced, thetas).backward()
 
-        if investigate:
-            loss_list.append(myloss_alpha(pts, goal_pd, sliced, thetas).item())
+        if filtr=="alpha_rips_hybrid":
+            myloss_alpha_ripser_hybrid(pts, goal_pd, sliced, thetas).backward()
+            if investigate:
+                loss_list.append(myloss_alpha_ripser_hybrid(pts, goal_pd, sliced, thetas).item())
             
         opt.step()
         scheduler.step()
