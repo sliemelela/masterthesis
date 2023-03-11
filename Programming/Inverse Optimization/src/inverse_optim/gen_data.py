@@ -7,10 +7,106 @@ from tqdm import tqdm
 import numpy as np
 import torch
 import tadasets
+from inverse_optim import DTM_filtrations
 
 ### ALPHA FILTRATIONS ###
 
-def create_alpha_pd(pts):
+def create_rips_pd(pts, max_edge_length):
+    """
+    Args:
+    pts       : points of the dataset that we want to change into a dataset that 
+                has the same topological features of some other dataset
+    goal_diag : persistence diagram of the dataset we want our initial point set 
+                to approximate in the sense that it has the same topological 
+                features
+    max_edge_length
+              : length of the maximal length of an edge that we are willing to 
+                include in the filtration
+
+    Returns:
+        persistence diagram
+
+    NOTE: Currently only supports 1 dimensional pd's.
+    """
+    complex0 = gd.RipsComplex(points=pts, max_edge_length=max_edge_length)
+    rips_complex = complex0.create_simplex_tree(max_dimension=2)
+    rips_complex.compute_persistence()
+
+    i = rips_complex.flag_persistence_generators()
+    if len(i[1]) > 0:
+        i1 = torch.tensor(i[1][0])  # pytorch sometimes interprets it as a tuple otherwise
+    else:
+        i1 = torch.empty((0, 4), dtype=int)
+    
+    # if len(i[0]) > 0:
+    #     i0 = torch.tensor(i[0][0]) 
+    # else:
+    #     i0 = torch.empty((0, 4), dtype=int)
+
+    # Same as the finite part of st.persistence_intervals_in_dimension(1), but differentiable
+    diag1 = torch.norm(pts[i1[:, (0, 2)]] - pts[i1[:, (1, 3)]], dim=-1)
+
+    # # Same as the finite part of st.persistence_intervals_in_dimension(1), but differentiable
+    # diag0 = torch.norm(pts[i1[:, (0, 2)]] - pts[i1[:, (1, 3)]], dim=-1)
+    return [torch.tensor([[0,0]]), diag1]
+
+
+def create_hybrid_dtm_pd(pts,m=0.9,p=1.5):
+
+    # Creaton of alpha DTM only works for non-grad tensors
+    if pts.requires_grad:
+        non_grad_pts = pts.detach().numpy()
+    else:
+        non_grad_pts = pts
+    
+    # print(type(non_grad_pts))
+
+    # Creation of simplex tree
+    alpha_dtm_st = DTM_filtrations.AlphaDTMFiltration(X=non_grad_pts, m=m, p=p)
+
+    # Calculating persistence
+    alpha_dtm_st.compute_persistence(2)
+    p = alpha_dtm_st.persistence_pairs()
+
+    # Keep only pairs that contribute to H1, i.e. (edge, triangle), and separate birth (p1b) and death (p1d)
+    p1b = torch.tensor([i[0] for i in p if len(i[0]) == 2])
+    p1d = torch.tensor([i[1] for i in p if len(i[0]) == 2])
+
+    # Keep only pairs that contribute to H0, i.e. (vertex, edge), and separate birth (p1b0) and death (p1d0)
+    # Skipping the infinities by checking second part instead of first part.
+    p0b = torch.tensor([i[0] for i in p if len(i[1]) == 2])
+    p0d = torch.tensor([i[1] for i in p if len(i[1]) == 2])
+
+    # Compute the distance between the extremities of the birth edge for H1
+    if len(p1b) == 0:
+        diag1 = torch.tensor([])
+    else:
+        b = torch.norm(pts[p1b[:,1]] - pts[p1b[:,0]], dim=-1, keepdim=True)
+
+        # For the death triangle, compute the maximum of the pairwise distances
+        d_1 = torch.norm(pts[p1d[:,1]] - pts[p1d[:,0]], dim=-1, keepdim=True)
+        d_2 = torch.norm(pts[p1d[:,1]] - pts[p1d[:,2]], dim=-1, keepdim=True)
+        d_3 = torch.norm(pts[p1d[:,2]] - pts[p1d[:,0]], dim=-1, keepdim=True)
+        d = torch.max(d_1, torch.max(d_2, d_3))
+
+        # *Not* the same as the finite part of st.persistence_intervals_in_dimension(1)
+        diag1 = torch.cat((b,d), 1)
+    
+    # Compute the distance between the extremities of the birth edge for H0
+    if len(p0b) == 0:
+        diag0 = torch.tensor([])
+    else:
+        # All birth times are 0 for the zero dimensional features
+        b0 = torch.tensor([[0] for _ in range(len(p0b))])
+
+        # Calculate the death times 
+        d0 = torch.norm(pts[p0d[:,1]] - pts[p0d[:,0]], dim=-1, keepdim=True)
+
+        diag0 = torch.cat((b0,d0), 1)
+    
+    return [diag0, diag1]
+
+def create_hybrid_pd(pts):
     """
     Given some point set, we create a Hybrid Rips/alpha complex.
     Args:
@@ -20,11 +116,6 @@ def create_alpha_pd(pts):
         - Tensor of birth/death coordinates that represent a persistent diagram (diag)
 
     """
-
-    # Ensuring points are tensor
-    if type(pts) != torch.Tensor:
-        pts = torch.tensor(pts)
-    
     # Creation of simplex tree
     alpha_complex = gd.AlphaComplex(points=pts)
     alpha_st = alpha_complex.create_simplex_tree()
@@ -72,29 +163,43 @@ def create_alpha_pd(pts):
     
     return [diag0, diag1]
 
-def myloss_alpha_ripser_hybrid(pts, goal_pd, sliced=False, thetas=torch.tensor([k/4 * np.pi for k in range(5)])):
+def wasser_loss(pts, goal_pd, sliced=False, thetas=torch.tensor([k/4 * np.pi for k in range(5)]), filtr="alpha_rips_hybrid", max_edge_length=0.5):
     """
     Args:
         pts       : points of the dataset that we want to change into a dataset that 
                     has the same topological features of some other dataset
-        goal_diag : persistence diagram of the dataset we want our initial point set 
+        goal_pd : persistence diagram of the dataset we want our initial point set 
                     to approximate in the sense that it has the same topological 
                     features
         sliced    : if set to true, it will use the sliced wasserstein distance
         thetas    : the angles used for the sliced wasserstein distance
+        max_edge_length
+                  : length of the maximal length of an edge that we are willing to 
+                    include in the filtration 
 
     Returns:
-        - Loss which consists of the Wasserstein distance of initial PD and goal PD,
-          and which penalizes the points going outside of the circle (loss).
+        - Loss which consists of the Wasserstein distance of initial PD and goal PD.
+
+    NOTE: Currently the sliced wasserstein distance only supports distances between 1 dimensional pd's.
     """
 
     # Creation of persistene diagram
-    diags = create_alpha_pd(pts)
+    if filtr == "alpha_rips_hybrid":
+        diags = create_hybrid_pd(pts)
+    elif filtr == "rips":
+        diags = create_rips_pd(pts, max_edge_length=max_edge_length)
+    elif filtr == "alpha_dtm":
+        diags = create_hybrid_dtm_pd(pts)
+    else:
+        # diags = create_hybrid_pd(pts)
+        raise Exception("Please specify a filtration method that is known.\
+                        The options are: alpha_rips_hybrid, rips, alpha_dtm")
     diag0 = diags[0]
     diag1 = diags[1]
-
+    
     goal_pd0 = goal_pd[0]
     goal_pd1 = goal_pd[1]
+
     # Total persistence is a special case of Wasserstein distance
     if sliced == False:
         dist0 = wasserstein_distance(diag0, goal_pd0, order=1, enable_autodiff=True, keep_essential_parts=False)  
@@ -107,11 +212,11 @@ def myloss_alpha_ripser_hybrid(pts, goal_pd, sliced=False, thetas=torch.tensor([
         dist = sum(dists)/len(dists)
         return dist
 
-def generate_data(goal_pd, amount, dim, lr, epochs, decay_speed=10, investigate=False, sliced=False, thetas=torch.tensor([k/4 * np.pi for k in range(5)]), filtr="alpha_rips_hybrid"):
+def generate_data(goal_pd, amount, dim, lr, epochs, decay_speed=10, investigate=False, sliced=False, thetas=torch.tensor([k/4 * np.pi for k in range(5)]), filtr="alpha_rips_hybrid", max_edge_length=0.5, box_size=1):
     """
     Args:
         goal_pd             : persistence diagram that we want to 'approximate' in the sense that we want to 
-                     generate a new dataset that approximately has the same persistence diagram
+                              generate a new dataset that approximately has the same persistence diagram
         amount (int)        : amount of data points
         dim (int)           : dimension of data points
         lr (float)          : learning rate 
@@ -122,16 +227,20 @@ def generate_data(goal_pd, amount, dim, lr, epochs, decay_speed=10, investigate=
                             : if set to true, it will produce a list of the losses and avg/max/min magnitude of movements per points.
         sliced              : if set to true, it will use the sliced wasserstein distance
         thetas              : the angles used for the sliced wasserstein distance
-        type                : what kind of filtration to use
+        filtr               : what kind of filtration to use
+        max_edge_length     : length of the maximal length of an edge that we are willing to 
+                              include in the filtration
+        box_size            : size of the box of the target point set
     
     Returns:
         - The generated dataset
         - A list of the losses at each epoch (if investigate_loss==True)
-        - Lists of the magnitude of the avg/max/min movement (lr*gradient) movement of points
-        - Plots of the generated dataset every 100 epochs including the final epoch 
+        - Plots of the generated dataset every 100 epochs including the final epoch (if investigate_loss==False)
     """
 
-    pts = (torch.rand((amount, dim))).requires_grad_()
+    pts = (torch.rand((amount, dim)))
+    pts = pts * box_size
+    pts.requires_grad_()
 
     # Set up optimizer for SGD
     opt = torch.optim.SGD([pts], lr=lr)
@@ -140,10 +249,7 @@ def generate_data(goal_pd, amount, dim, lr, epochs, decay_speed=10, investigate=
     # Initialize loss list
     if investigate:
         loss_list = []
-        max_mag_list = []
-        min_mag_list = []
-        avg_mag_list = []
-    
+        
     if investigate == False:
         # Plot initial point cloud
         P = pts.detach().numpy()
@@ -154,29 +260,12 @@ def generate_data(goal_pd, amount, dim, lr, epochs, decay_speed=10, investigate=
     for epoch in tqdm(range(epochs)):
         opt.zero_grad()
 
-        if filtr=="alpha_rips_hybrid":
-            myloss_alpha_ripser_hybrid(pts, goal_pd, sliced, thetas).backward()
-            if investigate:
-                loss_list.append(myloss_alpha_ripser_hybrid(pts, goal_pd, sliced, thetas).item())
-            
+        wasser_loss(pts, goal_pd, sliced, thetas, filtr, max_edge_length).backward()
+        if investigate:
+            loss_list.append(wasser_loss(pts, goal_pd, sliced, thetas, filtr).item())
+       
         opt.step()
         scheduler.step()
-        
-    
-
-        if investigate:
-            movement = pts.grad * scheduler.get_last_lr()[0]
-            movement_mag = torch.zeros(amount)
-
-            for i in range(amount):
-                movement_mag[i] = torch.linalg.norm(movement[i])
-            
-            max_mag = torch.max(movement_mag)
-            max_mag_list.append(max_mag)
-            min_mag = torch.min(movement_mag)
-            min_mag_list.append(min_mag)
-            avg_mag = torch.mean(movement_mag) 
-            avg_mag_list.append(avg_mag)
 
         if investigate == False:
             # Draw every 100 epochs
@@ -187,7 +276,7 @@ def generate_data(goal_pd, amount, dim, lr, epochs, decay_speed=10, investigate=
 
     
     if investigate:
-        return pts, loss_list, max_mag_list, min_mag_list, avg_mag_list
+        return pts, loss_list
     return pts
 
 ### ALPHA FILTRATIONS WITH SLICED WASSERSTEIN ###
@@ -233,7 +322,7 @@ def sliced_wasserstein_distance(dgms, theta):
     return dist
 
 
-
+###### EXPIREMENTS
 
 ### Periodicity tryout
 def per(x,y):
