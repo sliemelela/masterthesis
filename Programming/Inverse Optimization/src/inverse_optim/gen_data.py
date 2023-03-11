@@ -171,7 +171,9 @@ def wasser_loss(pts, goal_pd, sliced=False, thetas=torch.tensor([k/4 * np.pi for
         goal_pd : persistence diagram of the dataset we want our initial point set 
                     to approximate in the sense that it has the same topological 
                     features
-        sliced    : if set to true, it will use the sliced wasserstein distance
+        sliced    : if set to true, it will use the sliced wasserstein distance. If set to a float, 
+                    you will get that percentage of the most persistent features after which we do a 
+                    euclidean distance
         thetas    : the angles used for the sliced wasserstein distance
         max_edge_length
                   : length of the maximal length of an edge that we are willing to 
@@ -204,6 +206,35 @@ def wasser_loss(pts, goal_pd, sliced=False, thetas=torch.tensor([k/4 * np.pi for
     if sliced == False:
         dist0 = wasserstein_distance(diag0, goal_pd0, order=1, enable_autodiff=True, keep_essential_parts=False)  
         dist1 = wasserstein_distance(diag1, goal_pd1, order=1, enable_autodiff=True, keep_essential_parts=False)  
+        dist = dist0 + dist1
+        return dist
+    elif isinstance(sliced, float) or isinstance(sliced, int):
+        
+        # Sorting everyting by persistence and making it into a vector
+        diag0 = torch.stack(sorted(diag0, key=lambda diag0: diag0[1] - diag0[0], reverse=True)).flatten()
+        if diag1.shape[0] != 0:
+            diag1 = torch.stack(sorted(diag1, key=lambda diag1: diag1[1] - diag1[0], reverse=True)).flatten()
+        else:
+            diag1 = torch.tensor([])
+        goal_pd0 = torch.stack(sorted(goal_pd0, key=lambda goal_pd0: goal_pd0[1] - goal_pd0[0], reverse=True)).flatten()
+        goal_pd1 = torch.stack(sorted(goal_pd1, key=lambda goal_pd1: goal_pd1[1] - goal_pd1[0], reverse=True)).flatten()
+
+        # Calculating the "sliced" percent of features we want to keep
+        # NOTE: I actually want to make it max, but in those cases I wouldn't know how to calculate the distance
+        zero_dim_amount = round(min(diag0.shape[0], goal_pd0.shape[0]) * sliced)
+        one_dim_amount = round(min(diag1.shape[0], goal_pd1.shape[0]) * sliced)
+
+        # Throwing out the non-persistent features
+        # NOTE: Not doing max can result in a diagram with 0 features on both making the distance 0, which is not what we want.
+        diag0 = diag0[:zero_dim_amount]
+        goal_pd0 = goal_pd0[:zero_dim_amount]
+        diag1 = diag1[:one_dim_amount]
+        goal_pd1 = goal_pd1[:one_dim_amount]
+
+        # Computing the distance
+        dist0 = torch.linalg.norm(goal_pd0 - diag0)
+        dist1 = torch.linalg.norm(goal_pd1 - diag1)
+
         dist = dist0 + dist1
         return dist
     else:
