@@ -3,7 +3,7 @@ from inverse_optim import gen_data
 import torch
 import numpy as np
 
-def research_lr(lr_list, goal_pd, amount, dim, epochs, decay_speed=10, sliced=False, thetas=torch.tensor([k/4 * np.pi for k in range(5)]), filtr="alpha_rips_hybrid", max_edge_length=0.5, box_size=1):
+def research_lr(lr_list, goal_pd, amount, dim, epochs, decay_speed=10, sliced=False, thetas=torch.tensor([k/4 * np.pi for k in range(5)]), filtr="alpha_rips_hybrid", max_edge_length=0.5, box_size=1, init_pts="random"):
     """
     Args:
         lr_list             : list of floats that represent learning rates that you would want to compare
@@ -19,6 +19,7 @@ def research_lr(lr_list, goal_pd, amount, dim, epochs, decay_speed=10, sliced=Fa
         max_edge_length     : length of the maximal length of an edge that we are willing to 
                               include in the filtration
         box_size            : size of the box of the target point set
+        init_pts            : initial point set that we want to change into some target point set
     
     Produces:
         - Plot of loss vs epochs for each initial learning rate that decays with some parameter decay_speed
@@ -28,7 +29,8 @@ def research_lr(lr_list, goal_pd, amount, dim, epochs, decay_speed=10, sliced=Fa
         _, loss_list= \
             gen_data.generate_data(goal_pd=goal_pd, amount=amount, dim=dim,\
                  lr=lr, epochs=epochs, decay_speed=decay_speed, investigate=True,\
-                    sliced=sliced, thetas=thetas, filtr=filtr, max_edge_length=max_edge_length, box_size=box_size)
+                    sliced=sliced, thetas=thetas, filtr=filtr, max_edge_length=max_edge_length,\
+                        box_size=box_size, init_pts=init_pts)
         
         # Loss research
         plt.plot(range(epochs), loss_list, label=f"lr = {lr}", alpha=0.9)

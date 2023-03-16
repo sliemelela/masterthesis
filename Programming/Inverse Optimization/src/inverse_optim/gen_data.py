@@ -51,15 +51,13 @@ def create_rips_pd(pts, max_edge_length):
     return [torch.tensor([[0,0]]), diag1]
 
 
-def create_hybrid_dtm_pd(pts,m=0.9,p=1.5):
+def create_hybrid_dtm_pd(pts,m=0.7, p=1.5):
 
     # Creaton of alpha DTM only works for non-grad tensors
     if pts.requires_grad:
         non_grad_pts = pts.detach().numpy()
     else:
         non_grad_pts = pts
-    
-    # print(type(non_grad_pts))
 
     # Creation of simplex tree
     alpha_dtm_st = DTM_filtrations.AlphaDTMFiltration(X=non_grad_pts, m=m, p=p)
@@ -243,7 +241,7 @@ def wasser_loss(pts, goal_pd, sliced=False, thetas=torch.tensor([k/4 * np.pi for
         dist = sum(dists)/len(dists)
         return dist
 
-def generate_data(goal_pd, amount, dim, lr, epochs, decay_speed=10, investigate=False, sliced=False, thetas=torch.tensor([k/4 * np.pi for k in range(5)]), filtr="alpha_rips_hybrid", max_edge_length=0.5, box_size=1):
+def generate_data(goal_pd, amount, dim, lr, epochs, decay_speed=10, investigate=False, sliced=False, thetas=torch.tensor([k/4 * np.pi for k in range(5)]), filtr="alpha_rips_hybrid", max_edge_length=0.5, box_size=1, init_pts="random"):
     """
     Args:
         goal_pd             : persistence diagram that we want to 'approximate' in the sense that we want to 
@@ -262,16 +260,25 @@ def generate_data(goal_pd, amount, dim, lr, epochs, decay_speed=10, investigate=
         max_edge_length     : length of the maximal length of an edge that we are willing to 
                               include in the filtration
         box_size            : size of the box of the target point set
+        init_pts            : initial point set that we want to change into some target point set
     
     Returns:
         - The generated dataset
         - A list of the losses at each epoch (if investigate_loss==True)
         - Plots of the generated dataset every 100 epochs including the final epoch (if investigate_loss==False)
     """
-
-    pts = (torch.rand((amount, dim)))
-    pts = pts * box_size
-    pts.requires_grad_()
+    if init_pts == "random":
+        pts = (torch.rand((amount, dim)))
+        pts = pts * box_size
+        pts.requires_grad_()
+    else:
+        pts = torch.tensor(init_pts)
+        if pts.requires_grad:
+            raise Exception("The initial point set must have requires_grad_() to to False.\
+                             Also make sure for the research part that the init_pts is not a tensor.")
+        else:
+            pts.requires_grad_()
+    
 
     # Set up optimizer for SGD
     opt = torch.optim.SGD([pts], lr=lr)
