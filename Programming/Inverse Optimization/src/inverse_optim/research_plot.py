@@ -35,9 +35,38 @@ def research_lr(lr_list, goal_pd, amount, dim, epochs, decay_speed=10, sliced=Fa
         # Loss research
         plt.plot(range(epochs), loss_list, label=f"lr = {lr}", alpha=0.9)
 
-    # Loss research
-    plt.title("Wasserstein distance between goal PD and initially random PD")
+    # Loss plot
+    if sliced==False:
+        plt.title("Wasserstein distance between goal PD and initially (random) PD")
+    elif isinstance(sliced, float):
+        plt.title(f"Top-k=({sliced}) distance between goal PD and initially (random) PD")
+    elif sliced==True:
+        plt.title("Sliced Wasserstein distance between goal PD and initially (random) PD")
     plt.xlabel("Epochs")
     plt.ylabel("Loss")
     plt.legend(loc="upper right")
     plt.show()
+
+def check_gaussianity_for_pts(pts, nx, ny, boxlength, bin_amount=100):
+    """
+    Args:
+        pts: A 2-dimensional point set
+
+    Produces:
+        - A histogram plot of all the two dimensional grid counts (sizex, sizey) flattened
+
+    Returns:
+        - The grid counts
+    """
+    gridx = np.linspace(0, boxlength, nx)
+    gridy = np.linspace(0, boxlength, ny)
+    print(gridx.shape)
+    print(gridy.shape)
+
+    print(pts.shape)
+    deltax, _, _ = np.histogram2d(pts[:, 0], pts[:, 1], bins=[gridx, gridy])
+    counts, bins = np.histogram(deltax, bins=bin_amount)
+    plt.hist(bins[:-1], bins, weights=counts, density=True, label='Data',alpha=0.8)
+    plt.show()
+    return deltax
+

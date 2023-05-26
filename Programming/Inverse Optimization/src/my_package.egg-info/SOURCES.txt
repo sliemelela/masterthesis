@@ -1,5 +1,6 @@
 README.md
 setup.py
+src/inverse_optim/DTM_filtrations.py
 src/inverse_optim/__init__.py
 src/inverse_optim/gen_data.py
 src/inverse_optim/research_plot.py
