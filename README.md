@@ -29,10 +29,21 @@ To activate your new virtual environment, use the command
 source your_favorite_name/bin/activate
 ```
 
+To make sure you can also use the environment within your jupyter notebook do the following. From inside the environment install `ipykernel` using pip:
+```bash
+pip install ipykernel
+```
+Now install a new kernel
+```bash
+ipython kernel install --user --name=some_name_you_want
+```
+where `some_name_you_want` does not necessarily have to be the same as `your_favorite_name`
+
 If you would like to use another virtual environment or stop using it, you simply use the command 
 ```bash
 deactivate
 ```
+
 
 ## Installing the package need in the Inverse Optimization algorithm
 To make sure you are able to properly run the notebooks, you need to make sure you install the (local) package `inverse_optim`.
