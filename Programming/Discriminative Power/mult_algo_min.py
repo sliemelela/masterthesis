@@ -1,3 +1,13 @@
+"""mult_algo_min.py
+
+This module is used to define functions needed to find the best path in the bipersistence module with respect to some loss.
+If you run this module, you will get a widget so you can see how the PD changes by changing the lines.
+
+Todo:
+    * Make faster
+    * Implement a way to do line pieces
+"""
+
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider, Button
@@ -65,113 +75,75 @@ def DTM(X,query_pts,m):
 
         return DTM_result
 
+def s(simplex, DTM_values):
+    return np.max(DTM_values[simplex])
+
+def orig_filt(simplex):
+    if len(simplex) == 1:
+        return 0
+    else:
+        simplex_coords = pts[simplex]
+        try:
+            # Points with the largest distance are in the convex hull 
+            hull = ConvexHull(simplex_coords)
+
+            # Extract the points forming the hull
+            hullpoints = simplex_coords[hull.vertices,:]
+
+            # Naive way of finding the best pair in O(H^2) time if H is number of points on hull
+            hdist = cdist(hullpoints, hullpoints, metric='euclidean')
+
+            # Get the farthest apart points
+            bestpair = np.unravel_index(hdist.argmax(), hdist.shape)
+
+            # Calculate the distance between the furthest pair
+            distance = np.linalg.norm(hullpoints[bestpair[0]] - hullpoints[bestpair[1]])
+
+            return distance
+        except:
+        # Naive way of finding the best pair in O(H^2) time if H is number of points on hull
+            alldist = cdist(simplex_coords, simplex_coords, metric='euclidean')
+
+            # Get the farthest apart points
+            bestpair = np.unravel_index(alldist.argmax(), alldist.shape)
+
+            # Calculate the distance between the furthest pair
+            distance = np.linalg.norm(simplex_coords[bestpair[0]] - simplex_coords[bestpair[1]])
+            return distance
+
+def filtration_function(alpha, beta, simplex, DTM_values):
+
+    # The filtration function for 0 dimensional simplices (and infinity)
+    if len(simplex) == 0:
+        return np.inf
+
+    # Assign filtration value to each simplex (see thesis)
+    dens = s(simplex, DTM_values)
+    orig_filt_value = orig_filt(simplex)
+    if orig_filt_value >= 1/alpha * dens - beta/alpha:
+        filtration = min(orig_filt_value, alpha*orig_filt_value)
+        return filtration
+    else:
+        filtration = min(1/alpha * abs(dens - beta), abs(dens - beta))
+        return filtration
+
 def biline_rips_diag(alpha, beta, pts):
 
-    # Density function on a simplex
+    # Density value for each vertex
     DTM_values = DTM(pts, pts, 0.01)
-    def s(simplex):
-        return np.max(DTM_values[simplex])
 
-    # Build the rips complex
+    # Build the rips/alpha complex
     complex = gd.AlphaComplex(points=pts)
     st_rips = complex.create_simplex_tree()
 
     # Creation of new simplex tree
     st = gd.SimplexTree()
     for simplex in st_rips.get_skeleton(2): 
-
-        # Assign filtration value to each simplex (see thesis)
-        if len(simplex[0]) == 1:
-            i = simplex[0][0]
-            dens = DTM_values[i]
-            if dens <= beta:
-                st.insert([i], filtration=0)
-            else:
-                # print("Change ab")
-                st.insert([i], filtration=(dens-beta) + (1/alpha)*(dens-beta))
-        else:
-            dens = s(simplex[0])
-            orig_filt = simplex[1]
-            if alpha>= (dens - beta)/orig_filt or dens <= beta:
-                st.insert(simplex[0], filtration=alpha*orig_filt + orig_filt)
-            else:
-                st.insert(simplex[0], filtration=(dens-beta) + (1/alpha)*(dens-beta))
-    
-  
+        filtration = filtration_function(alpha, beta, simplex[0], DTM_values)
+        st.insert(simplex[0], filtration=filtration)
     return st
 
-def s(simplex):
-        return np.max(DTM_values[simplex])
-
-def orig_filt(simplex):
-  assert len(simplex) > 1, f"The simplices should be larger than 0 dimensional."
-
-
-  simplex_coords = pts[simplex]
-  
-  if len(simplex_coords) > 2:
-
-    try:
-        # Points with the largest distance are in the convex hull 
-        hull = ConvexHull(simplex_coords)
-
-        # Extract the points forming the hull
-        hullpoints = simplex_coords[hull.vertices,:]
-
-        # Naive way of finding the best pair in O(H^2) time if H is number of points on hull
-        hdist = cdist(hullpoints, hullpoints, metric='euclidean')
-
-        # Get the farthest apart points
-        bestpair = np.unravel_index(hdist.argmax(), hdist.shape)
-
-        # Calculate the distance between the furthest pair
-        distance = np.linalg.norm(hullpoints[bestpair[0]] - hullpoints[bestpair[1]])
-
-        return distance
-    except:
-       # Naive way of finding the best pair in O(H^2) time if H is number of points on hull
-        alldist = cdist(simplex_coords, simplex_coords, metric='euclidean')
-
-        # Get the farthest apart points
-        bestpair = np.unravel_index(alldist.argmax(), alldist.shape)
-
-        # Calculate the distance between the furthest pair
-        distance = np.linalg.norm(simplex_coords[bestpair[0]] - simplex_coords[bestpair[1]])
-        return distance
-  else: 
-    distance = np.linalg.norm(simplex_coords[0] - simplex_coords[1])
-    return distance
-
-def filtration_function(alpha, beta, simplex):
-
-  # The filtration function for 0 dimensional simplices (and infinity)
-  if len(simplex) == 0:
-    return np.inf
-  elif len(simplex) == 1:
-    i = simplex[0]
-    dens = DTM_values[i]
-    if dens <= beta:
-        filtration=0
-        return filtration
-    else:
-        filtration = (dens-beta) + (1/alpha)*(dens-beta)
-        return filtration
-
-  # The filtration function for > 0 dimensional simplices
-  else:
-    dens = s(simplex)
-    orig_filt_value = orig_filt(simplex)
-    if alpha>= (dens - beta)/orig_filt_value or dens <= beta:
-        filtration=alpha*orig_filt_value + orig_filt_value
-        return filtration
-    else:
-        filtration= (dens-beta) + (1/alpha)*(dens-beta)
-        return filtration
-
-def create_line_pd(alpha, beta, pts,  m=0.5):
-
-  # Values of the vertices
-  DTM_values = DTM(pts, pts, m)
+def create_line_pd(alpha, beta, pts, m=0.5):
 
   # Creation of simplex tree
   st = biline_rips_diag(alpha, beta, pts)
@@ -184,8 +156,8 @@ def create_line_pd(alpha, beta, pts,  m=0.5):
   diag0 = []
   diag1 = []
   for simplex1, simplex2 in p:
-    birth = filtration_function(alpha, beta, simplex1)
-    death = filtration_function(alpha, beta, simplex2)
+    birth = filtration_function(alpha, beta, simplex1, DTM_values)
+    death =  filtration_function(alpha, beta, simplex2, DTM_values)
 
     if len(simplex1) == 1:
       diag0.append((birth, death))
@@ -201,7 +173,7 @@ def create_line_pd(alpha, beta, pts,  m=0.5):
 
 ##########
 # pts = np.array([[1,2], [3,4], [2,5], [2,7], [3,7]])
-pts = tadasets.sphere(n=10, r=1, noise=0.4)
+pts = tadasets.sphere(n=20, r=1, noise=0.4)
 DTM_values = DTM(pts, pts, 0.5)
 
 # Define initial parameters

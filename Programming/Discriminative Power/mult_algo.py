@@ -72,3 +72,69 @@ def biline_rips_st(alpha, beta, pts):
             else:
                 st.insert(simplex[0], filtration=(dens-beta) + (1/alpha)*(dens-beta))
     return st
+
+def create_line_pd(pts, alpha=0.5, beta=0):
+    """
+    Args:
+        tensor: a pytorch tensor of size Nx2
+        key_fn: some function that gives a value for each row
+
+    Returns:
+        - The tensor with respect to that tensor.
+    """
+    # Creaton of alpha DTM only works for non-grad tensors
+    if pts.requires_grad:
+        non_grad_pts = pts.detach().numpy()
+    else:
+        non_grad_pts = pts
+
+    # Creation of simplex tree
+    biline_st = DTM_filtrations.biline_rips_st(pts=pts.detach().numpy(), alpha=alpha, beta=beta)
+
+
+    # Calculating persistence
+    biline_st.compute_persistence(2)
+    p = biline_st.persistence_pairs()
+
+    # Keep only pairs that contribute to H1, i.e. (edge, triangle), and separate birth (p1b) and death (p1d)
+    p1b = torch.tensor([i[0] for i in p if len(i[0]) == 2])
+    p1d = torch.tensor([i[1] for i in p if len(i[0]) == 2])
+
+    # Keep only pairs that contribute to H0, i.e. (vertex, edge), and separate birth (p1b0) and death (p1d0)
+    # Skipping the infinities by checking second part instead of first part.
+    p0b = torch.tensor([i[0] for i in p if len(i[1]) == 2])
+    p0d = torch.tensor([i[1] for i in p if len(i[1]) == 2])
+
+    # Compute the distance between the extremities of the birth edge for H1
+    if len(p1b) == 0:
+        diag1 = torch.tensor([])
+    else:
+        b = torch.norm(pts[p1b[:,1]] - pts[p1b[:,0]], dim=-1, keepdim=True)
+        
+        if len(p1d) == 0:
+            d = torch.tensor([float('inf')])
+        else:
+            # For the death triangle, compute the maximum of the pairwise distances
+            d_1 = torch.norm(pts[p1d[:,1]] - pts[p1d[:,0]], dim=-1, keepdim=True)
+            d_2 = torch.norm(pts[p1d[:,1]] - pts[p1d[:,2]], dim=-1, keepdim=True)
+            d_3 = torch.norm(pts[p1d[:,2]] - pts[p1d[:,0]], dim=-1, keepdim=True)
+            d = torch.max(d_1, torch.max(d_2, d_3))
+
+        # *Not* the same as the finite part of st.persistence_intervals_in_dimension(1)
+        diag1 = torch.cat((b,d), 1)
+    
+    # Compute the distance between the extremities of the birth edge for H0
+    if len(p0b) == 0:
+        diag0 = torch.tensor([])
+    else:
+        # All birth times are 0 for the zero dimensional features
+        # b0 = torch.norm(pts[p0b[:,1]] - pts[p0b[:,0]], dim=-1, keepdim=True)
+        b0 = torch.tensor([[0] for _ in range(len(p0b))])
+
+        # Calculate the death times 
+        d0 = torch.norm(pts[p0d[:,1]] - pts[p0d[:,0]], dim=-1, keepdim=True)
+
+        diag0 = torch.cat((b0,d0), 1)
+    
+
+    return [diag0, diag1]

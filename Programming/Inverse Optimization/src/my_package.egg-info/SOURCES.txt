@@ -3,6 +3,7 @@ setup.py
 src/inverse_optim/DTM_filtrations.py
 src/inverse_optim/__init__.py
 src/inverse_optim/gen_data.py
+src/inverse_optim/gen_data_gpu.py
 src/inverse_optim/research_plot.py
 src/inverse_optim/sancho.py
 src/my_package.egg-info/PKG-INFO
