@@ -1,7 +1,18 @@
 # Master Thesis
 
 ## Start up
-This codebase is entirely written in Python 3.7.6. Make sure to use virtual environments to ensure consistent results of the program.
+This codebase is written entirely in Python 3.11.3. The file requirements.txt contains all necessary packages to run the code successfully. These are easy to install via pip using the following instruction:
+
+```bash
+pip install -r requirements.txt
+```
+Or using conda:
+
+```bash
+conda install --file requirements.txt
+```
+
+Make sure to use virtual environments to ensure consistent results of the program.
 
 
 ### Setting up a virtual environment
